@@ -7,7 +7,7 @@
 ```text
 GReSym
 │
-├── Backend     - ASP.NEY
+├── Backend     - ASP.NET
 ├── ML Service  - Python
 ├── Frontend    - Vue
 └── Mobile App  - Android/Kotlin 
