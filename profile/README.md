@@ -155,6 +155,21 @@ cd ../deploy
 docker compose exec ml-worker ml vectorize --limit 100
 ```
 
+### GPU (необязательно)
+
+По умолчанию ML-сервис работает на CPU. Для видеокарты AMD (ROCm) или NVIDIA (CUDA):
+
+```bash
+cd deploy
+TORCH_BACKEND=rocm ./manage.sh setup    # или TORCH_BACKEND=cuda; вернуть CPU: TORCH_BACKEND=cpu
+./manage.sh up --app                    # пересобирает образ ML с PyTorch для выбранной видеокарты
+```
+
+- ROCm: на хосте нужен драйвер amdgpu (`/dev/kfd`, `/dev/dri`). Сама библиотека ROCm приходит вместе с PyTorch.
+- CUDA: нужны драйвер NVIDIA и [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+
+Подробности (тип данных модели, `HSA_OVERRIDE_GFX_VERSION`, запуск без Docker) — в README репозиториев `deploy` и `ml`.
+
 ### Адреса
 
 | Сервис | Адрес |
