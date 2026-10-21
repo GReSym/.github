@@ -131,11 +131,20 @@ cd deploy
 
 ### 7. Схема БД
 
-Если дампа не было или код новее дампа, примените миграции. Нужны .NET SDK и `dotnet-ef`:
+Дамп уже содержит схему и таблицу `__EFMigrationsHistory`. Миграции нужны в двух случаях:
+
+- **дампа не было**: контейнер MariaDB создаёт пустую базу `GamesRecommend` без таблиц, и API без них не работает;
+- **код новее дампа**: в backend есть миграции, которых нет в `__EFMigrationsHistory`.
+
+Миграции не встроены в Docker и применяются с хоста. Для этого нужны .NET 10 SDK и инструмент `dotnet-ef`:
 
 ```bash
+dotnet tool install --global dotnet-ef   # один раз; manage.sh находит его и в ~/.dotnet/tools
 cd ../backend && ./manage.sh database update
 ```
+
+`database update` подключается к контейнеру через `localhost:3306`, используя `backend/GReSym.Infrastructure/appsettings.json`, который генерирует `./manage.sh setup`.
+Пользователь приложения создаётся с полными правами на базу, поэтому миграциям этого достаточно. Повторный запуск безопасен: уже применённые миграции пропускаются.
 
 ### 8. Векторы игр
 
@@ -156,7 +165,19 @@ docker compose exec ml-worker ml vectorize --limit 100
 | Milvus | `localhost:19530`, проверка: `curl localhost:9091/healthz` |
 | MariaDB | `localhost:3306` |
 
-Swagger API доступен только при запуске без контейнера (`./manage.sh run api`, окружение Development).
+Swagger UI для API включён только в окружении `Development`. При запуске без контейнера (`./manage.sh run api`) оно используется по умолчанию:
+http://localhost:5147/swagger. Контейнер `api` работает в `Production`, поэтому Swagger в нём выключен.
+Если Swagger нужен и в Docker, создайте `deploy/compose.override.yaml`. Docker Compose подхватывает этот файл автоматически, а в git он не попадает:
+
+```yaml
+services:
+  api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+```
+
+Затем выполните `./manage.sh up --app`, и Swagger будет доступен на http://localhost:5147/swagger. Для общедоступного развёртывания так делать не стоит:
+Development показывает подробные ошибки.
 
 ### Резервные копии
 
