@@ -100,12 +100,19 @@ JSON
 
 ### 4. Модель эмбеддингов
 
-Модель Qwen3-Embedding-0.6B занимает около 2,3 ГБ. В образ она не входит, а монтируется в контейнер.
+По умолчанию (`model.backend: onnx`) модель работает через ONNX Runtime на CPU. Её нужно скачать в каталог `ml/Qwen3-Embedding-onnx/`:
+
+```bash
+cd ml
+uv run hf download Qdrant/Qwen3-Embedding-0.6B-onnx --include "onnx/model.onnx*" --include "*.json" --local-dir Qwen3-Embedding-onnx
+cd ..
+```
+
+Для работы на GPU (`model.backend: torch`) нужна исходная модель в каталоге `ml/Qwen3-Embedding/`:
 
 ```bash
 cd ml
 uv run hf download Qwen/Qwen3-Embedding-0.6B --local-dir Qwen3-Embedding
-# или: git lfs install && git clone https://huggingface.co/Qwen/Qwen3-Embedding-0.6B Qwen3-Embedding
 cd ..
 ```
 
