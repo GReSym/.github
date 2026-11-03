@@ -7,11 +7,11 @@
 ```text
 GReSym
 │
-├── backend     - ASP.NET API + парсер Steam (GTK UI)
-├── ml          - ML-сервис на Python: векторизация игр, рекомендации
-├── deploy      - Docker Compose: MariaDB, RabbitMQ, Milvus, API, ML
-├── Frontend    - Vue (планируется)
-└── Mobile App  - Android/Kotlin (планируется)
+├── backend      - ASP.NET API + парсер Steam (GTK UI)
+├── ml           - ML-сервис на Python: векторизация игр, рекомендации
+├── deploy       - Docker Compose: MariaDB, RabbitMQ, Milvus, Openinary (картинки), API, ML
+├── web-frontend - веб-клиент на Vue 3
+└── Mobile App   - Android/Kotlin (планируется)
 ```
 
 Общая схема взаимодействия компонентов проекта:
@@ -41,6 +41,12 @@ GReSym
              └──────────────┬──────────────┘
                             ▼
                      Recommendations
+                            │
+                            ▼
+                   ┌─────────────────┐       ┌─────────────────────┐
+                   │  web-frontend   │◀──────│ Openinary / Steam   │
+                   └─────────────────┘       │ (картинки игр)      │
+                                             └─────────────────────┘
 ```
 
 ## Развёртывание с нуля
@@ -52,7 +58,8 @@ GReSym
 - Docker Engine с плагином Compose; пользователь должен состоять в группе `docker`;
 - `git`, `jq`, `openssl`, `zstd`;
 - `git-lfs` или [uv](https://docs.astral.sh/uv/), чтобы скачать модель;
-- для разработки без контейнеров и для миграций: .NET 10 SDK + `dotnet-ef`, uv, клиент MariaDB.
+- для разработки без контейнеров и для миграций: .NET 10 SDK + `dotnet-ef`, uv, клиент MariaDB;
+- для веб-клиента: Node.js 22.18+ или 24.12+.
 
 ```bash
 sudo usermod -aG docker $USER        # затем перелогиниться
@@ -60,17 +67,18 @@ sudo systemctl enable --now docker
 docker context use default
 ```
 
-На портах 3306, 5672, 15672, 19530, 9091, 5147 и 8000 не должно быть других служб, например локальной MariaDB или RabbitMQ.
+На портах 3306, 5672, 15672, 19530, 9091, 3000, 8090, 5147 и 8000 не должно быть других служб, например локальной MariaDB или RabbitMQ.
 
 ### 2. Репозитории
 
-Все три репозитория должны лежать в одном каталоге: `deploy` обращается к `../backend` и `../ml`.
+Все репозитории должны лежать в одном каталоге: `deploy` обращается к `../backend` и `../ml`.
 
 ```bash
 mkdir GReSym && cd GReSym
 git clone https://github.com/GReSym/backend.git
 git clone https://github.com/GReSym/ml.git
 git clone https://github.com/GReSym/deploy.git
+git clone https://github.com/GReSym/web-frontend.git
 ```
 
 ### 3. Конфигурация
@@ -153,7 +161,38 @@ cd ../backend && ./manage.sh database update
 `database update` подключается к контейнеру через `localhost:3306`, используя `backend/GReSym.Infrastructure/appsettings.json`, который генерирует `./manage.sh setup`.
 Пользователь приложения создаётся с полными правами на базу, поэтому миграциям этого достаточно. Повторный запуск безопасен: уже применённые миграции пропускаются.
 
-### 8. Векторы игр
+### 8. Картинки (Openinary)
+
+Картинки игр постепенно переносятся с CDN Steam в Openinary (сервис `openinary` в deploy, версия закреплена).
+Пока картинка не перенесена, клиент берёт её со Steam, так что этот шаг можно отложить.
+
+1. Откройте http://localhost:3000, создайте учётную запись администратора на странице `/setup`,
+   затем в меню профиля → **API Keys** создайте ключ.
+2. Впишите ключ в `backend/config.json` как `"openinary_api_key"` и обновите конфигурацию:
+
+   ```bash
+   cd backend && ./manage.sh setup && cd ../deploy && ./manage.sh setup && ./manage.sh up --app
+   ./manage.sh openinary-unlimit-keys   # иначе Openinary пропускает не больше 100 запросов в минуту на ключ
+   ```
+
+3. В веб-клиенте под учётной записью администратора (страница администратора → «Картинки») задайте базовый URL медиа
+   (`http://localhost:8090` или `/cdn`, см. README web-frontend) и запустите перенос: сначала обложки,
+   скриншоты — выборочно (все скриншоты каталога занимают около 300 ГБ).
+
+Наружу публикуется только шлюз `media` (порт 8090): он пропускает лишь заданные размеры картинок.
+
+### 9. Веб-клиент
+
+```bash
+cd web-frontend
+npm install --legacy-peer-deps
+npm run dev                # http://localhost:5173, запросы /api и /cdn проксируются на API и шлюз картинок
+```
+
+Для демо: `npm run build && npm run preview -- --host` (порт 4173); через туннель достаточно открыть только этот порт,
+если базовый URL медиа равен `/cdn`.
+
+### 10. Векторы игр
 
 Векторизация идёт на CPU, около 0,6 игры в секунду. Например, первые 100 игр:
 
@@ -181,7 +220,10 @@ TORCH_BACKEND=rocm ./manage.sh setup    # или TORCH_BACKEND=cuda; верну�
 
 | Сервис | Адрес |
 |--------|-------|
+| Веб-клиент | http://localhost:5173 (`npm run dev`) |
 | API | http://localhost:5147 |
+| Openinary (дашборд, только для администратора) | http://localhost:3000 |
+| Шлюз картинок (публичный адрес медиа) | http://localhost:8090 |
 | ML API (Swagger) | http://localhost:8000/docs |
 | RabbitMQ Management | http://localhost:15672 |
 | Milvus | `localhost:19530`, проверка: `curl localhost:9091/healthz` |
@@ -205,9 +247,10 @@ Development показывает подробные ошибки.
 
 ```bash
 cd deploy
-./manage.sh backup all                             # MariaDB (.sql.zst) + векторы Milvus (.npz) → backups/<дата>/
+./manage.sh backup all                             # MariaDB (.sql.zst) + векторы Milvus (.npz) + Openinary (.tar) → backups/<дата>/
 ./manage.sh restore mariadb backups/<дата>/mariadb-GamesRecommend.sql.zst
 ./manage.sh restore milvus backups/<дата>/milvus.npz
+./manage.sh restore openinary backups/<дата>/openinary.tar   # вместе с дампом MariaDB: в БД хранятся пути к картинкам
 ./manage.sh milvus-snapshot                        # точная копия data/milvus (для той же версии Milvus)
 ```
 
