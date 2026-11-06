@@ -108,21 +108,18 @@ JSON
 
 ### 4. Модель эмбеддингов
 
-По умолчанию (`model.backend: onnx`) модель работает через ONNX Runtime на CPU. Её нужно скачать в каталог `ml/Qwen3-Embedding-onnx/`:
+По умолчанию используется EmbeddingGemma 300M. Файлы моделей хранятся раздельно в игнорируемом git каталоге `ml/models/`:
+ONNX-вариант — для CPU по умолчанию (`model.backend: onnx`), исходная модель — для torch/GPU (`model.backend: torch`):
 
 ```bash
 cd ml
-uv run hf download Qdrant/Qwen3-Embedding-0.6B-onnx --include "onnx/model.onnx*" --include "*.json" --local-dir Qwen3-Embedding-onnx
+uv run hf download onnx-community/embeddinggemma-300m-ONNX --local-dir models/embeddinggemma-300m-onnx
+uv run hf download google/embeddinggemma-300m --local-dir models/embeddinggemma-300m
 cd ..
 ```
 
-Для работы на GPU (`model.backend: torch`) нужна исходная модель в каталоге `ml/Qwen3-Embedding/`:
-
-```bash
-cd ml
-uv run hf download Qwen/Qwen3-Embedding-0.6B --local-dir Qwen3-Embedding
-cd ..
-```
+Модель и ONNX-репозиторий: [EmbeddingGemma 300M](https://huggingface.co/google/embeddinggemma-300m) и
+[EmbeddingGemma ONNX](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX).
 
 ### 5. Данные (необязательно)
 
@@ -194,7 +191,7 @@ npm run dev                # http://localhost:5173, запросы /api и /cdn 
 
 ### 10. Векторы игр
 
-Векторизация идёт на CPU, около 0,6 игры в секунду. Например, первые 100 игр:
+Векторизация идёт на CPU, около 1 игры в секунду. Например, первые 100 игр:
 
 ```bash
 cd ../deploy
@@ -203,18 +200,19 @@ docker compose exec ml-worker ml vectorize --limit 100
 
 ### GPU (необязательно)
 
-По умолчанию ML-сервис работает на CPU. Для видеокарты AMD (ROCm) или NVIDIA (CUDA):
+По умолчанию ML-сервис работает на CPU (ONNX Runtime). Для видеокарты AMD (ROCm) или NVIDIA (CUDA)
+векторизация тоже идёт через ONNX Runtime (`onnxruntime-migraphx` / `onnxruntime-gpu` внутри образа ML):
 
 ```bash
 cd deploy
-TORCH_BACKEND=rocm ./manage.sh setup    # или TORCH_BACKEND=cuda; вернуть CPU: TORCH_BACKEND=cpu
-./manage.sh up --app                    # пересобирает образ ML с PyTorch для выбранной видеокарты
+ORT_BACKEND=rocm ./manage.sh setup    # или ORT_BACKEND=cuda; вернуть CPU: ORT_BACKEND=cpu
+./manage.sh up --app                  # пересобирает образ ML с GPU-сборкой ONNX Runtime
 ```
 
-- ROCm: на хосте нужен драйвер amdgpu (`/dev/kfd`, `/dev/dri`). Сама библиотека ROCm приходит вместе с PyTorch.
+- ROCm: на хосте нужен драйвер amdgpu (`/dev/kfd`, `/dev/dri`). ROCm userspace приходит внутри образа ML.
 - CUDA: нужны драйвер NVIDIA и [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
-Подробности (тип данных модели, `HSA_OVERRIDE_GFX_VERSION`, запуск без Docker) — в README репозиториев `deploy` и `ml`.
+Подробности (`ORT_VERSION`, `ROCM_APT_VERSION`, `HSA_OVERRIDE_GFX_VERSION`, запуск без Docker) — в README репозиториев `deploy` и `ml`.
 
 ### Адреса
 
